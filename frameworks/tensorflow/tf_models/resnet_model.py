@@ -52,7 +52,7 @@ def bottleneck_block_v1(cnn, depth, depth_bottleneck, stride):
   name = name_key + str(cnn.counts[name_key])
   cnn.counts[name_key] += 1
 
-  with tf.variable_scope(name):
+  with tf.compat.v1.variable_scope(name):
     if depth == in_size:
       if stride == 1:
         shortcut = input_layer
@@ -98,7 +98,7 @@ def bottleneck_block_v2(cnn, depth, depth_bottleneck, stride):
 
   preact = cnn.batch_norm()
   preact = tf.nn.relu(preact)
-  with tf.variable_scope(name):
+  with tf.compat.v1.variable_scope(name):
     if depth == in_size:
       if stride == 1:
         shortcut = input_layer
@@ -157,10 +157,10 @@ def residual_block(cnn, depth, stride, pre_activation):
     padding = (depth - in_size) // 2
     if cnn.channel_pos == 'channels_last':
       shortcut = tf.pad(
-          shortcut, [[0, 0], [0, 0], [0, 0], [padding, padding]])
+          tensor=shortcut, paddings=[[0, 0], [0, 0], [0, 0], [padding, padding]])
     else:
       shortcut = tf.pad(
-          shortcut, [[0, 0], [padding, padding], [0, 0], [0, 0]])
+          tensor=shortcut, paddings=[[0, 0], [padding, padding], [0, 0], [0, 0]])
   else:
     shortcut = input_layer
   if pre_activation:
@@ -228,7 +228,7 @@ class ResnetModel(model_lib.Model):
         float(datasets.IMAGENET_NUM_TRAIN_IMAGES) / batch_size)
     boundaries = [int(num_batches_per_epoch * x) for x in [30, 60]]
     values = [0.1, 0.01, 0.001]
-    return tf.train.piecewise_constant(global_step, boundaries, values)
+    return tf.compat.v1.train.piecewise_constant(global_step, boundaries, values)
 
 
 def create_resnet50_model():
@@ -303,7 +303,7 @@ class ResnetCifar10Model(model_lib.Model):
                                                   dtype=np.int64)
     boundaries = [x for x in boundaries]
     values = [0.1, 0.01, 0.001, 0.0002]
-    return tf.train.piecewise_constant(global_step, boundaries, values)
+    return tf.compat.v1.train.piecewise_constant(global_step, boundaries, values)
 
 
 def create_resnet20_cifar_model():

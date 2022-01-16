@@ -114,7 +114,7 @@ class ConvNetBuilder(object):
     # devices and machines as type `dtype`, not `cast_dtype`. In particular,
     # this means in fp16 mode, variables are transferred as fp32 values, not
     # fp16 values, which uses extra bandwidth.
-    var = tf.get_variable(name, shape, dtype, *args, **kwargs)
+    var = tf.compat.v1.get_variable(name, shape, dtype, *args, **kwargs)
     return tf.cast(var, cast_dtype)
 
   def _conv2d_impl(self, input_layer, num_channels_in, filters, kernel_size,
@@ -137,7 +137,7 @@ class ConvNetBuilder(object):
         strides = [1] + strides + [1]
       else:
         strides = [1, 1] + strides
-      return tf.nn.conv2d(input_layer, weights, strides, padding,
+      return tf.nn.conv2d(input=input_layer, filters=weights, strides=strides, padding=padding,
                           data_format=self.data_format)
 
   def conv(self,
@@ -160,10 +160,10 @@ class ConvNetBuilder(object):
       num_channels_in = self.top_size
     kernel_initializer = None
     if stddev is not None:
-      kernel_initializer = tf.truncated_normal_initializer(stddev=stddev)
+      kernel_initializer = tf.compat.v1.truncated_normal_initializer(stddev=stddev)
     name = 'conv' + str(self.counts['conv'])
     self.counts['conv'] += 1
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
       strides = [1, d_height, d_width, 1]
       if self.data_format == 'NCHW':
         strides = [strides[0], strides[3], strides[1], strides[2]]
@@ -191,7 +191,7 @@ class ConvNetBuilder(object):
                      [pad_w_beg, pad_w_end], [0, 0]]
           if self.data_format == 'NCHW':
             padding = [padding[0], padding[3], padding[1], padding[2]]
-          input_layer = tf.pad(input_layer, padding)
+          input_layer = tf.pad(tensor=input_layer, paddings=padding)
           conv = self._conv2d_impl(input_layer, num_channels_in,
                                    num_out_channels,
                                    kernel_size=[k_height, k_width],
@@ -203,7 +203,7 @@ class ConvNetBuilder(object):
         if bias is not None:
           biases = self.get_variable('biases', [num_out_channels],
                                      self.variable_dtype, self.dtype,
-                                     initializer=tf.constant_initializer(bias))
+                                     initializer=tf.compat.v1.constant_initializer(bias))
           biased = tf.reshape(
               tf.nn.bias_add(conv, biases, data_format=self.data_format),
               conv.get_shape())
@@ -255,7 +255,7 @@ class ConvNetBuilder(object):
       else:
         ksize = [1, 1, k_height, k_width]
         strides = [1, 1, d_height, d_width]
-      pool = tf.nn.max_pool(input_layer, ksize, strides, padding=mode,
+      pool = tf.nn.max_pool2d(input=input_layer, ksize=ksize, strides=strides, padding=mode,
                             data_format=self.data_format, name=name)
     self.top_layer = pool
     return pool
@@ -305,17 +305,17 @@ class ConvNetBuilder(object):
       num_channels_in = self.top_size
     name = 'affine' + str(self.counts['affine'])
     self.counts['affine'] += 1
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
       init_factor = 2. if activation == 'relu' else 1.
       stddev = stddev or np.sqrt(init_factor / num_channels_in)
       kernel = self.get_variable(
           'weights', [num_channels_in, num_out_channels],
           self.variable_dtype, self.dtype,
-          initializer=tf.truncated_normal_initializer(stddev=stddev))
+          initializer=tf.compat.v1.truncated_normal_initializer(stddev=stddev))
       biases = self.get_variable('biases', [num_out_channels],
                                  self.variable_dtype, self.dtype,
-                                 initializer=tf.constant_initializer(bias))
-      logits = tf.nn.xw_plus_b(input_layer, kernel, biases)
+                                 initializer=tf.compat.v1.constant_initializer(bias))
+      logits = tf.compat.v1.nn.xw_plus_b(input_layer, kernel, biases)
       if activation == 'relu':
         affine1 = tf.nn.relu(logits, name=name)
       elif activation == 'linear' or activation is None:
@@ -333,7 +333,7 @@ class ConvNetBuilder(object):
       in_size = self.top_size
     name += str(self.counts[name])
     self.counts[name] += 1
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
       col_layers = []
       col_layer_sizes = []
       for c, col in enumerate(cols):
@@ -369,7 +369,7 @@ class ConvNetBuilder(object):
     self.counts['spatial_mean'] += 1
     axes = [1, 2] if self.data_format == 'NHWC' else [2, 3]
     self.top_layer = tf.reduce_mean(
-        self.top_layer, axes, keep_dims=keep_dims, name=name)
+        input_tensor=self.top_layer, axis=axes, keepdims=keep_dims, name=name)
     return self.top_layer
 
   def dropout(self, keep_prob=0.5, input_layer=None):
@@ -378,13 +378,13 @@ class ConvNetBuilder(object):
     else:
       self.top_size = None
     name = 'dropout' + str(self.counts['dropout'])
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
       if not self.phase_train:
         keep_prob = 1.0
       if self.use_tf_layers:
         dropout = core_layers.dropout(input_layer, 1. - keep_prob)
       else:
-        dropout = tf.nn.dropout(input_layer, keep_prob)
+        dropout = tf.nn.dropout(input_layer, rate=1 - (keep_prob))
       self.top_layer = dropout
       return dropout
 
@@ -396,35 +396,35 @@ class ConvNetBuilder(object):
     shape = input_layer.shape
     num_channels = shape[3] if self.data_format == 'NHWC' else shape[1]
     beta = self.get_variable('beta', [num_channels], tf.float32, tf.float32,
-                             initializer=tf.zeros_initializer())
+                             initializer=tf.compat.v1.zeros_initializer())
     if use_scale:
       gamma = self.get_variable('gamma', [num_channels], tf.float32,
-                                tf.float32, initializer=tf.ones_initializer())
+                                tf.float32, initializer=tf.compat.v1.ones_initializer())
     else:
       gamma = tf.constant(1.0, tf.float32, [num_channels])
     # For moving variables, we use tf.get_variable instead of self.get_variable,
     # since self.get_variable returns the result of tf.cast which we cannot
     # assign to.
-    moving_mean = tf.get_variable('moving_mean', [num_channels],
+    moving_mean = tf.compat.v1.get_variable('moving_mean', [num_channels],
                                   tf.float32,
-                                  initializer=tf.zeros_initializer(),
+                                  initializer=tf.compat.v1.zeros_initializer(),
                                   trainable=False)
-    moving_variance = tf.get_variable('moving_variance', [num_channels],
+    moving_variance = tf.compat.v1.get_variable('moving_variance', [num_channels],
                                       tf.float32,
-                                      initializer=tf.ones_initializer(),
+                                      initializer=tf.compat.v1.ones_initializer(),
                                       trainable=False)
     if self.phase_train:
-      bn, batch_mean, batch_variance = tf.nn.fused_batch_norm(
+      bn, batch_mean, batch_variance = tf.compat.v1.nn.fused_batch_norm(
           input_layer, gamma, beta, epsilon=epsilon,
           data_format=self.data_format, is_training=True)
       mean_update = moving_averages.assign_moving_average(
           moving_mean, batch_mean, decay=decay, zero_debias=False)
       variance_update = moving_averages.assign_moving_average(
           moving_variance, batch_variance, decay=decay, zero_debias=False)
-      tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, mean_update)
-      tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, variance_update)
+      tf.compat.v1.add_to_collection(tf.compat.v1.GraphKeys.UPDATE_OPS, mean_update)
+      tf.compat.v1.add_to_collection(tf.compat.v1.GraphKeys.UPDATE_OPS, variance_update)
     else:
-      bn, _, _ = tf.nn.fused_batch_norm(
+      bn, _, _ = tf.compat.v1.nn.fused_batch_norm(
           input_layer, gamma, beta, mean=moving_mean,
           variance=moving_variance, epsilon=epsilon,
           data_format=self.data_format, is_training=False)
@@ -440,7 +440,7 @@ class ConvNetBuilder(object):
     name = 'batchnorm' + str(self.counts['batchnorm'])
     self.counts['batchnorm'] += 1
 
-    with tf.variable_scope(name) as scope:
+    with tf.compat.v1.variable_scope(name) as scope:
       if self.use_tf_layers:
         bn = tf.contrib.layers.batch_norm(
             input_layer,

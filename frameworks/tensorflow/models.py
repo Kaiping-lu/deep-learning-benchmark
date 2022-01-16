@@ -5,6 +5,7 @@ import numpy as np
 from frameworks.tensorflow.tf_models import resnet_model, vgg_model
 from frameworks.tensorflow.tf_models import convnet_builder
 import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
 
 class tensorflow_base:
 
@@ -16,7 +17,7 @@ class tensorflow_base:
         nclass = 1000
         use_tf_layers = False
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
         images = tf.constant(np.random.rand(*image_shape), dtype=data_type)
 
@@ -28,13 +29,13 @@ class tensorflow_base:
         model.add_inference(network)
         self.logits = network.affine(nclass, activation='linear')
         # bogus loss to force backprop
-        self.loss = tf.reduce_sum(self.logits)
-        self.grad = tf.gradients(self.loss, tf.trainable_variables())
-        self.initializer = tf.global_variables_initializer()
+        self.loss = tf.reduce_sum(input_tensor=self.logits)
+        self.grad = tf.gradients(ys=self.loss, xs=tf.compat.v1.trainable_variables())
+        self.initializer = tf.compat.v1.global_variables_initializer()
 
     def eval(self, num_iterations, num_warmups):
         durations = []
-        with tf.Session() as sess:
+        with tf.compat.v1.Session() as sess:
             sess.run(self.initializer)
             for i in range(num_iterations + num_warmups):
                 t1 = time()
@@ -47,7 +48,7 @@ class tensorflow_base:
 
     def train(self, num_iterations, num_warmups):
         durations = []
-        with tf.Session() as sess:
+        with tf.compat.v1.Session() as sess:
             sess.run(self.initializer)
             for i in range(num_iterations + num_warmups):
                 t1 = time()

@@ -6,15 +6,14 @@ import pickle
 import numpy as np
 
 frameworks = [
-    'pytorch',
-    'tensorflow',
-    'caffe2'
+#    'pytorch',
+#    'caffe2',
+     'tensorflow'
 ]
 
 models = [
     'vgg16',
-    'resnet152',
-    'densenet161'
+    'resnet152'
 ]
 
 precisions = [
